@@ -45,7 +45,13 @@ int main(int argc, char** argv){
     std::cerr.rdbuf(&cerr_fcgi_streambuf);
 
     std::cout << "Centent-type: text/html\r\n\r\n";
-    std::cout << "<html><body>Hi there</body></html>" << std::endl;
+    std::cout << "<html><body>Hi there<p>" << std::endl;
+    
+    char **env = request.envp;
+    while (*(++env))
+      std::cout << *env << "<p>" << std::endl;
+
+    std::cout << "</body></html>" << std::endl;
     FCGX_Finish_r(&request);
 
     std::cin.rdbuf(cin_streambuf);
