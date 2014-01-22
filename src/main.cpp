@@ -1,14 +1,13 @@
-//#include <exception>
 #include <iostream>
 #include <unistd.h>
 #include <ctime>
-//#include <cstdlib>
+#include <cstdlib>
 
+#include <sstream>
 #include <cstring>
 #include <sys/socket.h>
 #include <netdb.h>
 
-//#include <fastcgi.h>
 #include <fcgio.h>
 
 int getSocket(int port);
@@ -16,47 +15,58 @@ void diff(timespec start, timespec end);
 
 int main(int argc, char** argv){
   timespec init, end;
-  std::cout << "[INFO] Starting  Server on port 1234" << std::endl;
+
+  std::cout << "[INFO] Starting  Server on port 9999" << std::endl;
   int serverSocket = getSocket(9999);
 
-  std::cout << "Got socket number " << serverSocket << std::endl; 
-
-  std::streambuf * cin_streambuf  = std::cin.rdbuf();
-  std::streambuf * cout_streambuf = std::cout.rdbuf();
-  std::streambuf * cerr_streambuf = std::cerr.rdbuf();
-
+  std::cout << "[INFO] Got socket number " << serverSocket << std::endl; 
 
   FCGX_Request request;
   FCGX_Init();
   FCGX_InitRequest(&request, serverSocket, 0);
 
   int status = FCGX_Accept_r(&request);
-  std::cout << "Accept status is " << status << std::endl;
+  std::cout << "[INFO] Accept status is " << status << std::endl;
+
   while(status == 0) {
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &init);
-    std::cout << "Have a request" << std::endl;
+    
+    std::cout << "[INFO] Have a request" << std::endl;
 
-    fcgi_streambuf cin_fcgi_streambuf(request.in);
-    fcgi_streambuf cout_fcgi_streambuf(request.out);
-    fcgi_streambuf cerr_fcgi_streambuf(request.err);
-
-    std::cin.rdbuf(&cin_fcgi_streambuf);
-    std::cout.rdbuf(&cout_fcgi_streambuf);
-    std::cerr.rdbuf(&cerr_fcgi_streambuf);
-
-    std::cout << "Centent-type: text/html\r\n\r\n";
-    std::cout << "<html><body>Hi there<p>" << std::endl;
+    std::stringstream ss;
+    ss << "Centent-type: text/html\r\n\r\n";
+    ss << "<html><body>Hi there<p>" << std::endl;
     
     char **env = request.envp;
-    while (*(++env))
-      std::cout << *env << "<p>" << std::endl;
 
-    std::cout << "</body></html>" << std::endl;
+    int contentSize = 0;
+    while (*(++env)) {
+      char cpy[strlen(*env)+1];
+      strcpy(cpy, *env);
+
+      char * key = strtok(cpy, "=");
+      char * value = strtok(0, "");
+      if (value == 0) value = "";
+
+      const char * cl = "CONTENT_LENGTH";
+      const char * empty = "";
+      if (strcmp(key, cl ) == 0 && strcmp(value, empty) != 0) {
+	std::cout << "[DEBUG] Content Length found" << std::endl;
+	contentSize = atoi(value);
+      }
+
+      ss <<  key << " <----> " << value << "<br>" << std::endl;
+    }
+
+    char data[contentSize + 1];
+    data[contentSize] = '\0';
+    int n = FCGX_GetStr(data, contentSize, request.in);
+    ss << "<p> " << contentSize  << "Read: " << n << " Data: " << data << "<p>";
+    ss << "</body></html>" << std::endl;
+    FCGX_PutS(ss.str().c_str(), request.out);
+    FCGX_FFlush(request.out);
+    FCGX_FClose(request.out);
     FCGX_Finish_r(&request);
-
-    std::cin.rdbuf(cin_streambuf);
-    std::cout.rdbuf(cout_streambuf);
-    std::cerr.rdbuf(cerr_streambuf);
 
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end);
     diff(init, end);
